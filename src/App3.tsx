@@ -7,15 +7,19 @@ import axios from 'axios';
 interface Message{
   id:string;
   content:string;
-  sender?:string;   // 이 메시지를 누가 보냈는지 정보도 Message 객체에 담기 위해
-  isImage?:boolean; // 이 메시지가 이미지인지 여부 
+  sender?:string;     // 이 메시지를 누가 보냈는지 정보도 Message 객체에 담기 위해
+  isImage?:boolean;   // 이 메시지가 이미지인지 여부 
+  timestamp?:string;  // 메시지 도착 시간
 }
 
 
 
 function App3() {
+
+   // 기존에 저장된 대화 내용 복원하기 
+   const savedMsgs = localStorage.savedMsgs? JSON.parse(localStorage.savedMsgs) : [] ;
   
-  const [msgs, setMsgs] = useState<Message[]>([]);
+  const [msgs, setMsgs] = useState<Message[]>(savedMsgs);
   const inputRef=useRef<HTMLInputElement>(null);
   //대화방에 입장한 userName 도 상태값으로 관리하기
   const [userName, setUserName]=useState<string>();
@@ -54,7 +58,7 @@ function App3() {
           //출력할 메세지를 구성한다.
           //const msg=`${received.payload.userName} : ${received.payload.text}`;
           const msg = received.payload.text;
-          return [...prevState, {id:uuid(), content:msg, sender:received.payload.userName}];
+          return [...prevState, {id:uuid(), content:msg, sender:received.payload.userName, timestamp: getTimeStamp()}];
         });
 
       } else if(received.type === "whisper"){
@@ -66,7 +70,7 @@ function App3() {
           `[귓말] => ${received.payload.text}`
         ;
 
-        setMsgs(prevState => [...prevState, {id:uuid(), content:msg, sender:received.payload.userName}]);
+        setMsgs(prevState => [...prevState, {id:uuid(), content:msg, sender:received.payload.userName, timestamp: getTimeStamp()}]);
 
       } else if(received.type === "image"){
         // 이미지를 말풍선 안에 넣어서 보이게 하자
@@ -74,8 +78,9 @@ function App3() {
           id:uuid(),
           content:`/upload/${received.payload.saveFileName}`,
           isImage:true,
-          sender:received.payload.userName
-        }])
+          sender:received.payload.userName, 
+          timestamp: getTimeStamp()
+        }]);
       }
     },
     onClose:()=>{
@@ -127,6 +132,9 @@ function App3() {
       if(divRef.current){
        divRef.current!.scrollTop = divRef.current!.scrollHeight;
       }
+      // msgs 가 변경되면 변경된 전체 내용을 .localStorage 에 저장하기
+      localStorage.savedMsgs = JSON.stringify(msgs);;
+      
   }, [msgs]);
 
   //풍선스타일
@@ -138,7 +146,34 @@ function App3() {
     wordBreak: "break-word",
     fontSize: "0.95rem",
     lineHeight: "1.4",
+    position: "relative"
   };
+
+  // 기본 timeStampStyle
+  const TimeStampStyle:React.CSSProperties = {
+    position: "absolute",
+    width: "100px",
+    //border: "1px dotted red",
+    bottom: "0px",
+    fontSize: "0.6rem",
+    fontWeight: "bold",
+    color:"#555",
+    padding: "0px 5px"
+  }
+
+  // 남이 보낸 메시지 timeStampStyle
+  const otherTimeStampStyle:React.CSSProperties = {
+    ...TimeStampStyle,
+    right:"-100px"  // 우측으로부터 떨어진 거리 (- 라서 반대 방향)
+  }
+
+    // 내가 보낸 메시지 timeStampStyle
+    const myTimeStampStyle:React.CSSProperties = {
+      ...TimeStampStyle,
+      left:"-100px",  // 우측으로부터 떨어진 거리 (- 라서 반대 방향)
+      textAlign: 'right'
+    }
+
   // 내가 보낸 메시지 스타일 
   const myBubbleStyle: React.CSSProperties = {
     ...bubbleStyleBase,
@@ -160,6 +195,8 @@ function App3() {
 
   const inputUserRef = useRef<HTMLInputElement>(null);
   const handleEnter = ()=>{
+
+    setMsgs(savedMsgs);
     const obj={
         path:"/chat/enter", 
         data:{
@@ -285,6 +322,14 @@ function App3() {
     if (modalImageUrl) setScale(1);
   }, [modalImageUrl]);
 
+  // 메시지 도착 시간을 리턴하는 함수
+  const getTimeStamp = ()=>{
+    const date = new Date();
+    const hour = date.getHours();
+    const minute = date.getMinutes();
+    return `${hour}시 ${minute}분`;
+  }
+
   return (
     <div className='container'>
       <h1>WebSocket 테스트3</h1>
@@ -306,13 +351,14 @@ function App3() {
                             {
                               item.isImage ? 
                               <img src={item.content} 
-                                style={{maxWidth:"200px", borderRadius:"10px", cursor:"pointer"}}
+                                style={{maxWidth:"200px", borderRadius:"5px", cursor:"pointer"}}
                                 alt="업로드된 이미지"
                                 onClick={()=>setModalImageUrl(item.content)}
                                 /> 
                             : 
                               item.content 
                             }
+                            <div style={item.sender===userName?myTimeStampStyle:otherTimeStampStyle}>{item.timestamp}</div>
                           </div>
                         </div>
                       :
